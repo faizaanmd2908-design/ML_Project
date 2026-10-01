@@ -1,4 +1,8 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Credit Risk Scorer · Elastic Net</title>
 <style>
 :root{--bg:#0d1220;--card:#151c30;--ink:#e8ecf6;--mut:#8b96b3;--line:#263050;--acc:#5b8cff;--ok:#2fd19b;--bad:#ff5d73;--warn:#ffb84d}
@@ -12,49 +16,243 @@ button.alt{background:#222c4a;margin-top:8px}.row{display:flex;gap:8px}.row butt
 #res{display:none}.gauge{text-align:center}.pct{font-size:44px;font-weight:700}.tier{display:inline-block;padding:4px 12px;border-radius:99px;font-weight:600;font-size:13px}
 .bar{height:12px;border-radius:9px;background:linear-gradient(90deg,var(--ok),var(--warn),var(--bad));position:relative;margin:14px 0 4px}.bar i{position:absolute;top:-4px;width:4px;height:20px;background:#fff;border-radius:2px;transition:left .5s}
 .bar b{position:absolute;top:-18px;font-size:10px;color:var(--mut);transform:translateX(-50%)}
-.drv{display:grid;grid-template-columns:130px 1fr 54px;gap:8px;align-items:center;font-size:13px;margin:6px 0}.drv div.t{height:10px;background:#0d1424;border-radius:6px;position:relative}
+.drv{display:grid;grid-template-columns:145px 1fr 58px;gap:8px;align-items:center;font-size:13px;margin:6px 0}.drv div.t{height:10px;background:#0d1424;border-radius:6px;position:relative}
 .drv div.t u{position:absolute;top:0;height:10px;border-radius:6px;text-decoration:none}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px}.kpi{background:#0d1424;border-radius:10px;padding:10px;text-align:center}.kpi b{display:block;font-size:20px}.kpi small{color:var(--mut)}
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:16px}svg text{fill:var(--mut);font-size:10px}
 #err{color:var(--bad);font-size:13px;margin-top:10px;min-height:16px}.note{color:var(--mut);font-size:12px;margin-top:10px}
-</style></head><body>
-<header><h1>Credit Risk <span>Scorer</span></h1><p>Customer credit scoring with Elastic Net regularized logistic regression</p></header>
-<main><section>
-<div class="card"><h2>Loan application</h2>
-<div class="row"><button class="alt" onclick="preset('good')">Low-risk example</button><button class="alt" onclick="preset('bad')">High-risk example</button></div>
-<div class="g2"><div><label>Age</label><input id="person_age" type="number" value="30"></div><div><label>Annual income</label><input id="person_income" type="number" value="65000"></div>
-<div><label>Employment (yrs)</label><input id="person_emp_length" type="number" value="5"></div><div><label>Credit history (yrs)</label><input id="cb_person_cred_hist_length" type="number" value="6"></div>
-<div><label>Loan amount</label><input id="loan_amnt" type="number" value="10000"></div><div><label>Interest % (blank = by grade)</label><input id="loan_int_rate" type="number" step="0.01" placeholder="auto"></div></div>
-{% for k,label in [('person_home_ownership','Home ownership'),('loan_intent','Loan purpose'),('loan_grade','Loan grade'),('cb_person_default_on_file','Previous default on file')] %}
-<label>{{label}}</label><select id="{{k}}">{% for o in cats[k] %}<option>{{o}}</option>{% endfor %}</select>{% endfor %}
-<button onclick="go()">Assess risk</button><div id="err"></div></div></section>
-<section><div class="card" id="res"><h2>Assessment</h2><div class="gauge"><div class="pct" id="pct"></div><span class="tier" id="tier"></span><p id="dec" style="margin:8px 0 0"></p></div>
-<div class="bar"><i id="mk"></i><b id="thb">threshold</b></div><h2 style="margin-top:22px">What drove this score</h2><div id="drv"></div>
-<p class="note">Red pushes toward default, green toward repayment. Decision support only, not a lending decision.</p></div>
-<div class="card" style="margin-top:20px"><h2>Model performance (held-out test set)</h2><div class="kpis" id="kpi"></div>
-<div class="charts"><div><svg id="roc" viewBox="0 0 260 220"></svg></div><div><svg id="cm" viewBox="0 0 260 220"></svg></div></div>
-<h2 style="margin-top:20px">Strongest coefficients <small id="sel" style="color:var(--mut);font-weight:400"></small></h2><div id="coef"></div></div></section></main>
+.badge{display:inline-block;margin-top:8px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:var(--mut);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Credit Risk <span>Scorer</span></h1>
+  <p>Customer credit scoring with Elastic Net regularized logistic regression</p>
+</header>
+
+<main>
+<section>
+<div class="card">
+<h2>Loan application</h2>
+<div class="row">
+  <button class="alt" onclick="preset('good')">Low-risk example</button>
+  <button class="alt" onclick="preset('bad')">High-risk example</button>
+</div>
+
+<div class="g2">
+  <div><label>Age</label><input id="person_age" type="number" value="30"></div>
+  <div><label>Annual income</label><input id="person_income" type="number" value="65000"></div>
+  <div><label>Employment (yrs)</label><input id="person_emp_length" type="number" value="5"></div>
+  <div><label>Credit history (yrs)</label><input id="cb_person_cred_hist_length" type="number" value="6"></div>
+  <div><label>Loan amount</label><input id="loan_amnt" type="number" value="10000"></div>
+  <div><label>Interest rate (optional)</label><input id="loan_int_rate" type="number" step="0.01" placeholder="Leave blank to impute"></div>
+</div>
+
+<label>Home ownership</label>
+<select id="person_home_ownership">{% for o in cats["person_home_ownership"] %}<option>{{o}}</option>{% endfor %}</select>
+
+<label>Loan purpose</label>
+<select id="loan_intent">{% for o in cats["loan_intent"] %}<option>{{o}}</option>{% endfor %}</select>
+
+<label>Loan grade</label>
+<select id="loan_grade">{% for o in cats["loan_grade"] %}<option>{{o}}</option>{% endfor %}</select>
+
+<label>Previous default on file</label>
+<select id="cb_person_default_on_file">{% for o in cats["cb_person_default_on_file"] %}<option>{{o}}</option>{% endfor %}</select>
+
+<button onclick="go()">Assess risk</button>
+<div id="err"></div>
+<p class="note">Loan / income is calculated automatically from the entered income and loan amount.</p>
+</div>
+</section>
+
+<section>
+<div class="card" id="res">
+<h2>Assessment</h2>
+<div class="gauge">
+  <div class="pct" id="pct"></div>
+  <span class="tier" id="tier"></span>
+  <p id="dec" style="margin:8px 0 0"></p>
+</div>
+<div class="bar"><i id="mk"></i><b id="thb">threshold</b></div>
+
+<h2 style="margin-top:22px">What drove this score</h2>
+<div id="drv"></div>
+<p class="note">Red pushes the model toward default; green pushes toward non-default. These are model contributions, not causal explanations.</p>
+</div>
+
+<div class="card" style="margin-top:20px">
+<h2>Model performance (held-out test set)</h2>
+<div class="kpis" id="kpi"></div>
+
+<div class="charts">
+  <div><svg id="roc" viewBox="0 0 260 220"></svg></div>
+  <div><svg id="cm" viewBox="0 0 260 220"></svg></div>
+</div>
+
+<h2 style="margin-top:20px">Strongest model coefficients <small id="sel" style="color:var(--mut);font-weight:400"></small></h2>
+<div id="coef"></div>
+</div>
+</section>
+</main>
+
 <script>
-const $=id=>document.getElementById(id),F=["person_age","person_income","person_emp_length","cb_person_cred_hist_length","loan_amnt","loan_int_rate","person_home_ownership","loan_intent","loan_grade","cb_person_default_on_file"];
-const P={good:{person_age:38,person_income:95000,person_emp_length:10,cb_person_cred_hist_length:12,loan_amnt:8000,loan_int_rate:"",person_home_ownership:"MORTGAGE",loan_intent:"HOMEIMPROVEMENT",loan_grade:"A",cb_person_default_on_file:"N"},
-bad:{person_age:23,person_income:28000,person_emp_length:1,cb_person_cred_hist_length:2,loan_amnt:15000,loan_int_rate:"",person_home_ownership:"RENT",loan_intent:"MEDICAL",loan_grade:"E",cb_person_default_on_file:"Y"}};
-function preset(k){F.forEach(f=>$(f).value=P[k][f]);go()}
-async function go(){$("err").textContent="";const d={};F.forEach(f=>d[f]=$(f).value);
- const r=await fetch("/api/predict",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}),j=await r.json();
- if(!r.ok){$("err").textContent=j.error;return}
- const p=j.probability,c=j.high_risk?"var(--bad)":"var(--ok)";$("res").style.display="block";
- $("pct").textContent=(p*100).toFixed(1)+"%";$("pct").style.color=c;$("tier").textContent=j.tier+" risk";$("tier").style.background=c+"33";$("tier").style.color=c;
- $("dec").textContent=j.decision;$("mk").style.left=Math.min(98,p*100)+"%";$("thb").style.left=j.threshold*100+"%";$("thb").textContent="cut-off "+(j.threshold*100).toFixed(0)+"%";
- const m=Math.max(...j.drivers.map(x=>Math.abs(x.impact)));
- $("drv").innerHTML=j.drivers.map(x=>{const w=Math.abs(x.impact)/m*50,pos=x.impact>0;return `<div class="drv"><span>${x.feature}</span><div class="t"><u style="background:${pos?"var(--bad)":"var(--ok)"};width:${w}%;${pos?"left:50%":"right:50%"}"></u></div><span>${pos?"+":""}${x.impact.toFixed(2)}</span></div>`}).join("")}
-async function init(){const m=await (await fetch("/api/metrics")).json(),t=m.test,g=m.baseline_gradient_boosting;
- $("kpi").innerHTML=[["Accuracy",t.accuracy],["Precision",t.precision],["Recall",t.recall],["F1",t.f1],["ROC-AUC",t.roc_auc]].map(([a,b])=>`<div class="kpi"><b>${(b*100).toFixed(1)}%</b><small>${a}</small></div>`).join("");
- const X=v=>30+v*210,Y=v=>190-v*170;let s=`<text x="130" y="12" text-anchor="middle">ROC curve (AUC ${t.roc_auc.toFixed(3)})</text><rect x="30" y="20" width="210" height="170" fill="none" stroke="#263050"/><line x1="30" y1="190" x2="240" y2="20" stroke="#263050" stroke-dasharray="3"/>`;
- s+=`<polyline fill="none" stroke="#5b8cff" stroke-width="2" points="${m.roc.fpr.map((f,i)=>X(f)+","+Y(m.roc.tpr[i])).join(" ")}"/><text x="135" y="210" text-anchor="middle">False positive rate →</text>`;$("roc").innerHTML=s;
- const [[tn,fp],[fn,tp]]=t.confusion,mx=Math.max(tn,fp,fn,tp),cell=(v,x,y,l)=>`<rect x="${x}" y="${y}" width="100" height="80" rx="8" fill="rgba(91,140,255,${.15+.75*v/mx})"/><text x="${x+50}" y="${y+40}" text-anchor="middle" style="fill:#fff;font-size:18px;font-weight:700">${v}</text><text x="${x+50}" y="${y+58}" text-anchor="middle" style="fill:#dfe6ff">${l}</text>`;
- $("cm").innerHTML=`<text x="130" y="12" text-anchor="middle">Confusion matrix (threshold ${(m.threshold*100).toFixed(0)}%)</text>`+cell(tn,40,24,"True repay")+cell(fp,150,24,"False alarm")+cell(fn,40,112,"Missed default")+cell(tp,150,112,"Caught default");
- $("sel").textContent=`· ${m.zeroed} of ${m.n_features} coefficients shrunk to zero by L1 · GradientBoosting baseline AUC ${g.roc_auc.toFixed(3)}`;
- const top=m.coefficients.slice(0,10),mc=Math.abs(top[0].coef);
- $("coef").innerHTML=top.map(x=>{const w=Math.abs(x.coef)/mc*50,pos=x.coef>0;return `<div class="drv"><span style="font-size:11px">${x.feature.replace("missingindicator_","missing_")}</span><div class="t"><u style="background:${pos?"var(--bad)":"var(--ok)"};width:${w}%;${pos?"left:50%":"right:50%"}"></u></div><span>${x.coef.toFixed(2)}</span></div>`}).join("")}
+const $=id=>document.getElementById(id);
+
+const F=[
+  "person_age","person_income","person_emp_length",
+  "cb_person_cred_hist_length","loan_amnt","loan_int_rate",
+  "person_home_ownership","loan_intent","loan_grade",
+  "cb_person_default_on_file"
+];
+
+const P={
+  good:{
+    person_age:38,person_income:95000,person_emp_length:10,
+    cb_person_cred_hist_length:12,loan_amnt:8000,loan_int_rate:"",
+    person_home_ownership:"MORTGAGE",loan_intent:"HOMEIMPROVEMENT",
+    loan_grade:"A",cb_person_default_on_file:"N"
+  },
+  bad:{
+    person_age:23,person_income:28000,person_emp_length:1,
+    cb_person_cred_hist_length:2,loan_amnt:15000,loan_int_rate:"",
+    person_home_ownership:"RENT",loan_intent:"MEDICAL",
+    loan_grade:"E",cb_person_default_on_file:"Y"
+  }
+};
+
+function preset(k){
+  F.forEach(f=>$(f).value=P[k][f]);
+  go();
+}
+
+async function go(){
+  $("err").textContent="";
+  const d={};
+  F.forEach(f=>d[f]=$(f).value);
+
+  try{
+    const r=await fetch("/api/predict",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(d)
+    });
+    const j=await r.json();
+
+    if(!r.ok){
+      $("err").textContent=j.error || "Prediction failed";
+      return;
+    }
+
+    const p=j.probability;
+    const c=j.high_risk?"var(--bad)":"var(--ok)";
+
+    $("res").style.display="block";
+    $("pct").textContent=(p*100).toFixed(1)+"%";
+    $("pct").style.color=c;
+    $("tier").textContent=j.tier+" risk";
+    $("tier").style.background=c+"33";
+    $("tier").style.color=c;
+    $("dec").textContent=j.decision;
+
+    $("mk").style.left=Math.min(98,p*100)+"%";
+    $("thb").style.left=j.threshold*100+"%";
+    $("thb").textContent="cut-off "+(j.threshold*100).toFixed(0)+"%";
+
+    const m=Math.max(0,...j.drivers.map(x=>Math.abs(x.impact)));
+
+    $("drv").innerHTML=j.drivers.map(x=>{
+      const w=m?Math.abs(x.impact)/m*50:0;
+      const positive=x.impact>0;
+      return `<div class="drv">
+        <span>${x.feature}</span>
+        <div class="t">
+          <u style="background:${positive?"var(--bad)":"var(--ok)"};width:${w}%;${positive?"left:50%":"right:50%"}"></u>
+        </div>
+        <span>${positive?"+":""}${x.impact.toFixed(2)}</span>
+      </div>`;
+    }).join("");
+  }catch(e){
+    $("err").textContent="Could not connect to the prediction server.";
+  }
+}
+
+async function init(){
+  const m=await (await fetch("/api/metrics")).json();
+  const t=m.test;
+
+  $("kpi").innerHTML=[
+    ["Accuracy",t.accuracy],
+    ["Precision",t.precision],
+    ["Recall",t.recall],
+    ["F1",t.f1],
+    ["ROC-AUC",t.roc_auc]
+  ].map(([a,b])=>`
+    <div class="kpi">
+      <b>${(b*100).toFixed(1)}%</b>
+      <small>${a}</small>
+    </div>
+  `).join("");
+
+  const X=v=>30+v*210;
+  const Y=v=>190-v*170;
+
+  let s=`
+    <text x="130" y="12" text-anchor="middle">ROC curve (AUC ${t.roc_auc.toFixed(3)})</text>
+    <rect x="30" y="20" width="210" height="170" fill="none" stroke="#263050"/>
+    <line x1="30" y1="190" x2="240" y2="20" stroke="#263050" stroke-dasharray="3"/>
+  `;
+
+  s+=`
+    <polyline fill="none" stroke="#5b8cff" stroke-width="2"
+      points="${m.roc.fpr.map((f,i)=>X(f)+","+Y(m.roc.tpr[i])).join(" ")}"/>
+    <text x="135" y="210" text-anchor="middle">False positive rate →</text>
+  `;
+
+  $("roc").innerHTML=s;
+
+  const [[tn,fp],[fn,tp]]=t.confusion;
+  const mx=Math.max(tn,fp,fn,tp);
+
+  const cell=(v,x,y,l)=>`
+    <rect x="${x}" y="${y}" width="100" height="80" rx="8"
+      fill="rgba(91,140,255,${.15+.75*v/mx})"/>
+    <text x="${x+50}" y="${y+40}" text-anchor="middle"
+      style="fill:#fff;font-size:18px;font-weight:700">${v}</text>
+    <text x="${x+50}" y="${y+58}" text-anchor="middle"
+      style="fill:#dfe6ff">${l}</text>
+  `;
+
+  $("cm").innerHTML=`
+    <text x="130" y="12" text-anchor="middle">
+      Confusion matrix (threshold ${(m.threshold*100).toFixed(0)}%)
+    </text>
+    ${cell(tn,40,24,"True non-default")}
+    ${cell(fp,150,24,"False alarm")}
+    ${cell(fn,40,112,"Missed default")}
+    ${cell(tp,150,112,"Caught default")}
+  `;
+
+  $("sel").textContent=
+    ` · ${m.zeroed} of ${m.n_features} coefficients shrunk to zero by L1`;
+
+  const top=m.coefficients.slice(0,10);
+  const mc=Math.max(1,Math.abs(top[0]?.coef || 1));
+
+  $("coef").innerHTML=top.map(x=>{
+    const w=Math.abs(x.coef)/mc*50;
+    const positive=x.coef>0;
+    return `<div class="drv">
+      <span style="font-size:11px">${x.feature.replace("missingindicator_","missing_")}</span>
+      <div class="t">
+        <u style="background:${positive?"var(--bad)":"var(--ok)"};width:${w}%;${positive?"left:50%":"right:50%"}"></u>
+      </div>
+      <span>${x.coef.toFixed(2)}</span>
+    </div>`;
+  }).join("");
+}
+
 init();
-</script></body></html>
+</script>
+</body>
+</html>
